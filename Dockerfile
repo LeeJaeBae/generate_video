@@ -6,6 +6,9 @@ WORKDIR /
 # 런타임 패키지 설치
 RUN pip install -U "huggingface_hub[hf_transfer]" runpod websocket-client
 
+# 볼륨의 ComfyUI를 /ComfyUI로 심볼릭 링크
+RUN ln -s /runpod-volume/runpod-slim/ComfyUI /ComfyUI
+
 # 로컬 파일 복사
 COPY . .
 RUN chmod +x /entrypoint.sh
