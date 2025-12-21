@@ -19,3 +19,4 @@ einops
 imageio
 imageio-ffmpeg
 scipy
+comfy_api
