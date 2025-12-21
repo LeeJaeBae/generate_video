@@ -3,6 +3,10 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
+# use venv-cu128
+
+source /ComfyUI/.venv-cu128/bin/activate
+
 # Start ComfyUI in the background
 echo "Starting ComfyUI in the background..."
 python /ComfyUI/main.py --listen --use-sage-attention &
