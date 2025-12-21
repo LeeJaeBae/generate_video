@@ -17,6 +17,9 @@ client_id = str(uuid.uuid4())
 
 # 이미지 저장 디렉토리 (ComfyUI 컨테이너 기준)
 INPUT_DIR = os.getenv("COMFY_INPUT_DIR", "/comfyui/input")
+# ComfyUI 출력/임시 디렉토리 (컨테이너 기준)
+OUTPUT_DIR = os.getenv("COMFY_OUTPUT_DIR", "/comfyui/output")
+TEMP_DIR = os.getenv("COMFY_TEMP_DIR", "/comfyui/temp")
 
 
 def save_base64_image(name: str, base64_data: str) -> str:
@@ -84,9 +87,45 @@ def to_data_url(b64: str, mime: str) -> str:
     return f"data:{mime};base64,{b64}"
 
 
-def get_videos(ws, prompt):
+def resolve_comfy_file_path(item) -> str | None:
+    """
+    ComfyUI history outputs의 파일 정보를 실제 경로로 변환.
+    - 지원: fullpath / (filename + subfolder + type)
+    """
+    if not isinstance(item, dict):
+        return None
+
+    fullpath = item.get("fullpath")
+    if isinstance(fullpath, str) and fullpath:
+        return fullpath
+
+    filename = item.get("filename")
+    if not isinstance(filename, str) or not filename:
+        return None
+
+    subfolder = item.get("subfolder") or ""
+    if not isinstance(subfolder, str):
+        subfolder = ""
+
+    out_type = item.get("type") or "output"
+    base_dir = TEMP_DIR if out_type == "temp" else OUTPUT_DIR
+    return os.path.join(base_dir, subfolder, filename)
+
+
+def normalize_input_image_to_data_url(name: str | None, image_data: str) -> str | None:
+    """요청으로 들어온 이미지(base64 or data URL)를 data URL로 정규화"""
+    if not isinstance(image_data, str) or not image_data:
+        return None
+    if image_data.startswith("data:"):
+        return image_data
+    mime = guess_mime_from_path(name or "")
+    return to_data_url(image_data, mime)
+
+
+def get_outputs(ws, prompt):
     prompt_id = queue_prompt(prompt)["prompt_id"]
     output_videos = {}
+    output_images = {}
 
     while True:
         out = ws.recv()
@@ -104,17 +143,21 @@ def get_videos(ws, prompt):
     for node_id in history.get("outputs", {}):
         node_output = history["outputs"][node_id]
 
-        # ComfyUI 출력 키는 workflow에 따라 다를 수 있어서 gifs/videos 둘 다 처리
-        files = []
+        # ComfyUI 출력 키는 workflow에 따라 다를 수 있어서 images/gifs/videos 모두 처리
+        video_files = []
+        image_files = []
         if isinstance(node_output, dict):
             if "gifs" in node_output and isinstance(node_output["gifs"], list):
-                files = node_output["gifs"]
+                video_files = node_output["gifs"]
             elif "videos" in node_output and isinstance(node_output["videos"], list):
-                files = node_output["videos"]
+                video_files = node_output["videos"]
+
+            if "images" in node_output and isinstance(node_output["images"], list):
+                image_files = node_output["images"]
 
         videos_output = []
-        for item in files:
-            fullpath = item.get("fullpath") if isinstance(item, dict) else None
+        for item in video_files:
+            fullpath = resolve_comfy_file_path(item)
             if not fullpath:
                 continue
             with open(fullpath, "rb") as f:
@@ -122,9 +165,20 @@ def get_videos(ws, prompt):
             mime = guess_mime_from_path(fullpath)
             videos_output.append(to_data_url(b64, mime))
 
-        output_videos[node_id] = videos_output
+        images_output = []
+        for item in image_files:
+            fullpath = resolve_comfy_file_path(item)
+            if not fullpath:
+                continue
+            with open(fullpath, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("utf-8")
+            mime = guess_mime_from_path(fullpath)
+            images_output.append(to_data_url(b64, mime))
 
-    return output_videos
+        output_videos[node_id] = videos_output
+        output_images[node_id] = images_output
+
+    return {"videos": output_videos, "images": output_images}
 
 
 def wait_for_comfyui():
@@ -200,16 +254,49 @@ def handler(job):
             time.sleep(5)
 
     # 5) 워크플로우 실행
-    videos = get_videos(ws, workflow)
+    outputs = get_outputs(ws, workflow)
     ws.close()
 
     # 6) 결과 반환
     # 우리 프로젝트의 serverless 결과 파싱이 단순해서(output.videoUrl 형태), data URL로 반환
-    for node_id, arr in videos.items():
-        if arr:
-            return {"videoUrl": arr[0]}
+    video_url = None
+    image_url = None
 
-    return {"error": "비디오를 찾을 수 없습니다."}
+    videos = outputs.get("videos", {}) if isinstance(outputs, dict) else {}
+    images = outputs.get("images", {}) if isinstance(outputs, dict) else {}
+
+    if isinstance(videos, dict):
+        for _, arr in videos.items():
+            if isinstance(arr, list) and arr:
+                video_url = arr[0]
+                break
+
+    # 1) ComfyUI outputs에서 이미지 1장 우선
+    if isinstance(images, dict):
+        for _, arr in images.items():
+            if isinstance(arr, list) and arr:
+                image_url = arr[0]
+                break
+
+    # 2) 없으면 입력 이미지(첫 장)로 fallback
+    if not image_url and isinstance(job_input.get("images"), list) and job_input["images"]:
+        first = job_input["images"][0]
+        if isinstance(first, dict):
+            image_url = normalize_input_image_to_data_url(
+                first.get("name"),
+                first.get("data") or first.get("image") or "",
+            )
+
+    result = {}
+    if video_url:
+        result["videoUrl"] = video_url
+    if image_url:
+        result["imageUrl"] = image_url
+
+    if result:
+        return result
+
+    return {"error": "비디오/이미지를 찾을 수 없습니다."}
 
 
 runpod.serverless.start({"handler": handler})
