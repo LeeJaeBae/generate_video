@@ -6,18 +6,17 @@ import json
 import uuid
 import logging
 import urllib.request
-import urllib.parse
 import time
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-server_address = os.getenv('SERVER_ADDRESS', '127.0.0.1')
+server_address = os.getenv("SERVER_ADDRESS", "127.0.0.1")
 client_id = str(uuid.uuid4())
 
-# 이미지 저장 디렉토리
-INPUT_DIR = "/ComfyUI/input"
+# 이미지 저장 디렉토리 (ComfyUI 컨테이너 기준)
+INPUT_DIR = os.getenv("COMFY_INPUT_DIR", "/ComfyUI/input")
 
 
 def save_base64_image(name: str, base64_data: str) -> str:
@@ -28,7 +27,7 @@ def save_base64_image(name: str, base64_data: str) -> str:
         decoded_data = base64.b64decode(base64_data)
         file_path = os.path.join(INPUT_DIR, name)
 
-        with open(file_path, 'wb') as f:
+        with open(file_path, "wb") as f:
             f.write(decoded_data)
 
         logger.info(f"✅ 이미지 저장 완료: {file_path}")
@@ -42,8 +41,13 @@ def queue_prompt(prompt):
     url = f"http://{server_address}:8188/prompt"
     logger.info(f"Queueing prompt to: {url}")
     p = {"prompt": prompt, "client_id": client_id}
-    data = json.dumps(p).encode('utf-8')
-    req = urllib.request.Request(url, data=data)
+    data = json.dumps(p).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
     return json.loads(urllib.request.urlopen(req).read())
 
 
@@ -54,30 +58,70 @@ def get_history(prompt_id):
         return json.loads(response.read())
 
 
+def guess_mime_from_path(file_path: str) -> str:
+    _, ext = os.path.splitext(file_path)
+    ext = (ext or "").lower()
+    if ext == ".mp4":
+        return "video/mp4"
+    if ext == ".webm":
+        return "video/webm"
+    if ext == ".mov":
+        return "video/quicktime"
+    if ext == ".mkv":
+        return "video/x-matroska"
+    if ext == ".gif":
+        return "image/gif"
+    if ext in [".png"]:
+        return "image/png"
+    if ext in [".jpg", ".jpeg"]:
+        return "image/jpeg"
+    if ext in [".webp"]:
+        return "image/webp"
+    return "application/octet-stream"
+
+
+def to_data_url(b64: str, mime: str) -> str:
+    return f"data:{mime};base64,{b64}"
+
+
 def get_videos(ws, prompt):
-    prompt_id = queue_prompt(prompt)['prompt_id']
+    prompt_id = queue_prompt(prompt)["prompt_id"]
     output_videos = {}
 
     while True:
         out = ws.recv()
         if isinstance(out, str):
             message = json.loads(out)
-            if message['type'] == 'executing':
-                data = message['data']
-                if data['node'] is None and data['prompt_id'] == prompt_id:
+            if message.get("type") == "executing":
+                data = message.get("data", {})
+                if data.get("node") is None and data.get("prompt_id") == prompt_id:
                     break
         else:
             continue
 
     history = get_history(prompt_id)[prompt_id]
-    for node_id in history['outputs']:
-        node_output = history['outputs'][node_id]
+
+    for node_id in history.get("outputs", {}):
+        node_output = history["outputs"][node_id]
+
+        # ComfyUI 출력 키는 workflow에 따라 다를 수 있어서 gifs/videos 둘 다 처리
+        files = []
+        if isinstance(node_output, dict):
+            if "gifs" in node_output and isinstance(node_output["gifs"], list):
+                files = node_output["gifs"]
+            elif "videos" in node_output and isinstance(node_output["videos"], list):
+                files = node_output["videos"]
+
         videos_output = []
-        if 'gifs' in node_output:
-            for video in node_output['gifs']:
-                with open(video['fullpath'], 'rb') as f:
-                    video_data = base64.b64encode(f.read()).decode('utf-8')
-                videos_output.append(video_data)
+        for item in files:
+            fullpath = item.get("fullpath") if isinstance(item, dict) else None
+            if not fullpath:
+                continue
+            with open(fullpath, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("utf-8")
+            mime = guess_mime_from_path(fullpath)
+            videos_output.append(to_data_url(b64, mime))
+
         output_videos[node_id] = videos_output
 
     return output_videos
@@ -116,17 +160,23 @@ def handler(job):
         except json.JSONDecodeError as e:
             return {"error": f"workflow JSON 파싱 실패: {e}"}
 
-    # 2) images 배열 처리: [{ name: string, image: base64 }]
+    # 2) images 배열 처리 (우리 프로젝트: [{ name, data(base64) }])
+    #    다른 코드 호환: image 키도 지원
     images = job_input.get("images", [])
-    for img in images:
-        name = img.get("name")
-        image_data = img.get("image")
+    if isinstance(images, list):
+        for img in images:
+            if not isinstance(img, dict):
+                continue
+            name = img.get("name")
+            image_data = img.get("data") or img.get("image")  # data 우선
 
-        if not name or not image_data:
-            logger.warning(f"이미지 정보 누락: name={name}, image={'있음' if image_data else '없음'}")
-            continue
+            if not name or not image_data:
+                logger.warning(
+                    f"이미지 정보 누락: name={name}, data={'있음' if img.get('data') else '없음'}, image={'있음' if img.get('image') else '없음'}"
+                )
+                continue
 
-        save_base64_image(name, image_data)
+            save_base64_image(name, image_data)
 
     # 3) ComfyUI 서버 대기
     wait_for_comfyui()
@@ -154,9 +204,10 @@ def handler(job):
     ws.close()
 
     # 6) 결과 반환
-    for node_id in videos:
-        if videos[node_id]:
-            return {"video": videos[node_id][0]}
+    # 우리 프로젝트의 serverless 결과 파싱이 단순해서(output.videoUrl 형태), data URL로 반환
+    for node_id, arr in videos.items():
+        if arr:
+            return {"videoUrl": arr[0]}
 
     return {"error": "비디오를 찾을 수 없습니다."}
 
