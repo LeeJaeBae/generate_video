@@ -1,16 +1,15 @@
-# Use specific version of nvidia cuda image
-FROM wlsdml1114/multitalk-base:1.7 as runtime
+# Start from the base image
+FROM runpod/worker-comfyui:5.1.0-base
 
-WORKDIR /
+RUN rm -rf /workspace && \
+    ln -s /runpod-volume/runpod-slim/ComfyUI /workspace
 
-# 런타임 패키지 설치
-RUN pip install -U "huggingface_hub[hf_transfer]" runpod websocket-client
+# Install required packages and custom nodes
+RUN pip install huggingface-hub
+RUN comfy-node-install https://github.com/olduvai-jp/ComfyUI-HfLoader
 
-# 볼륨의 ComfyUI를 /ComfyUI로 심볼릭 링크
-RUN ln -s /runpod-volume/runpod-slim/ComfyUI /ComfyUI
-
-# 로컬 파일 복사
 COPY . .
-RUN chmod +x /entrypoint.sh
 
-CMD ["/entrypoint.sh"]
+CMD ["python", "-u", "/ComfyUI/main.py", "--disable-auto-launch", "--disable-metadata", "--listen", "--verbose", "DEBUG", "--log-stdout"]
+
+CMD ["python", "-u", "handler.py"]
