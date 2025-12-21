@@ -10,6 +10,11 @@ RUN comfy-node-install https://github.com/olduvai-jp/ComfyUI-HfLoader
 
 COPY . .
 
-CMD ["python", "-u", "/ComfyUI/main.py", "--disable-auto-launch", "--disable-metadata", "--listen", "--verbose", "DEBUG", "--log-stdout"]
+# venv-cu128 to opt/venv/
+RUN cp -r /workspace/.venv-cu128 /opt/venv/
 
-CMD ["python", "-u", "handler.py"]
+# Ensure entrypoint is executable
+RUN chmod +x /entrypoint.sh
+
+# Run ComfyUI (background) + handler (foreground)
+CMD ["/bin/bash", "/entrypoint.sh"]
