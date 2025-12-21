@@ -19,7 +19,8 @@ COPY . .
 # Python deps
 # /requirements.txt 를 쓰고 있으니 그 경로 유지
 RUN pip install --upgrade pip && \
-    pip install -r /requirements.txt
+    pip install -r requirements.txt
+
 
 # Custom nodes install
 # - HfLoader (네가 이미 설치하던 것)
