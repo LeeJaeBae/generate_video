@@ -2,7 +2,7 @@
 FROM runpod/worker-comfyui:5.1.0-base
 
 # /workspace 는 그대로 두고, /workspace/ComfyUI 만 영구 볼륨으로 연결
-RUN rm -rf /workspace/ComfyUI && \
+RUN rm -rf /workspace && \
     ln -s /runpod-volume/runpod-slim/ComfyUI /workspace/ComfyUI
 
 WORKDIR /
