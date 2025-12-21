@@ -1,56 +1,82 @@
 #!/bin/bash
+set -euo pipefail
 
-# Exit immediately if a command exits with a non-zero status.
-set -e
-
-# Select ComfyUI root (prefer /ComfyUI, fallback to /workspace)
-COMFY_ROOT=""
+# Select ComfyUI root (prefer /ComfyUI, fallback candidates)
 if [ -f "/ComfyUI/main.py" ]; then
-    COMFY_ROOT="/ComfyUI"
+  COMFY_ROOT="/ComfyUI"
 elif [ -f "/workspace/main.py" ]; then
-    COMFY_ROOT="/workspace"
+  COMFY_ROOT="/workspace"
+elif [ -f "/workspace/ComfyUI/main.py" ]; then
+  COMFY_ROOT="/workspace/ComfyUI"
 else
-    echo "Error: ComfyUI main.py not found in /ComfyUI or /workspace"
-    exit 1
+  echo "Error: ComfyUI main.py not found in /ComfyUI, /workspace, or /workspace/ComfyUI"
+  exit 1
 fi
 
 # Activate venv if present (try common locations)
 if [ -f "${COMFY_ROOT}/.venv-cu128/bin/activate" ]; then
-    # use venv-cu128 inside ComfyUI root
-    source "${COMFY_ROOT}/.venv-cu128/bin/activate"
+  source "${COMFY_ROOT}/.venv-cu128/bin/activate"
 elif [ -f "/opt/venv/.venv-cu128/bin/activate" ]; then
-    # copied by Dockerfile
-    source "/opt/venv/.venv-cu128/bin/activate"
+  source "/opt/venv/.venv-cu128/bin/activate"
 elif [ -f "/opt/venv/bin/activate" ]; then
-    source "/opt/venv/bin/activate"
+  source "/opt/venv/bin/activate"
 else
-    echo "Warning: venv activate script not found. Continuing with system python."
+  echo "Warning: venv activate script not found. Continuing with system python."
 fi
 
-# Start ComfyUI in the background
-echo "Starting ComfyUI in the background..."
-python -u "${COMFY_ROOT}/main.py" --listen 0.0.0.0 --port 8188 --use-sage-attention &
+# Optional args (avoid hard-crash if unsupported)
+COMFY_ARGS=(--listen 0.0.0.0 --port 8188)
 
-# Wait for ComfyUI to be ready
+# Toggle sage attention via env var (default off)
+# export USE_SAGE_ATTENTION=1 in RunPod env if you want
+if [ "${USE_SAGE_ATTENTION:-0}" = "1" ]; then
+  COMFY_ARGS+=(--use-sage-attention)
+fi
+
+echo "Starting ComfyUI in the background..."
+python -u "${COMFY_ROOT}/main.py" "${COMFY_ARGS[@]}" &
+COMFY_PID=$!
+
+# If comfy dies, kill container (and handler) too
+cleanup() {
+  if kill -0 "$COMFY_PID" >/dev/null 2>&1; then
+    kill "$COMFY_PID" || true
+  fi
+}
+trap cleanup EXIT
+
 echo "Waiting for ComfyUI to be ready..."
-max_wait=120  # 최대 2분 대기
-wait_count=0
-while [ $wait_count -lt $max_wait ]; do
-    if curl -s http://127.0.0.1:8188/ > /dev/null 2>&1; then
-        echo "ComfyUI is ready!"
-        break
+max_wait=120
+elapsed=0
+
+# Require a couple consecutive successes to reduce race
+ok=0
+while [ $elapsed -lt $max_wait ]; do
+  if curl -fsS "http://127.0.0.1:8188/" >/dev/null 2>&1; then
+    ok=$((ok+1))
+    if [ $ok -ge 3 ]; then
+      echo "ComfyUI is ready!"
+      break
     fi
-    echo "Waiting for ComfyUI... ($wait_count/$max_wait)"
-    sleep 2
-    wait_count=$((wait_count + 2))
+  else
+    ok=0
+  fi
+
+  # If comfy died while waiting, fail fast
+  if ! kill -0 "$COMFY_PID" >/dev/null 2>&1; then
+    echo "Error: ComfyUI process exited during startup"
+    exit 1
+  fi
+
+  sleep 2
+  elapsed=$((elapsed+2))
+  echo "Waiting for ComfyUI... (${elapsed}/${max_wait})"
 done
 
-if [ $wait_count -ge $max_wait ]; then
-    echo "Error: ComfyUI failed to start within $max_wait seconds"
-    exit 1
+if [ $elapsed -ge $max_wait ]; then
+  echo "Error: ComfyUI failed to start within ${max_wait} seconds"
+  exit 1
 fi
 
-# Start the handler in the foreground
-# 이 스크립트가 컨테이너의 메인 프로세스가 됩니다.
 echo "Starting the handler..."
 exec python -u /handler.py

@@ -1,0 +1,21 @@
+runpod
+websocket-client
+huggingface-hub
+
+# core
+torch
+torchvision
+torchaudio
+numpy
+pillow
+opencv-python
+requests
+tqdm
+safetensors
+pyyaml
+
+# video / advanced
+einops
+imageio
+imageio-ffmpeg
+scipy
