@@ -1,9 +1,9 @@
 # Start from the base image
 FROM runpod/worker-comfyui:5.1.0-base
 
-# /workspace 는 그대로 두고, /workspace/ComfyUI 만 영구 볼륨으로 연결
+# /workspace 를 네트워크 볼륨(또는 영구 볼륨)로 연결
 RUN rm -rf /workspace && \
-    ln -s /runpod-volume/runpod-slim/ComfyUI /workspace/ComfyUI
+    ln -s /runpod-volume/runpod-slim/ComfyUI /workspace
 
 WORKDIR /
 
@@ -39,7 +39,7 @@ RUN comfy-node-install https://github.com/olduvai-jp/ComfyUI-HfLoader && \
 
 # 각 커스텀 노드 폴더에 requirements.txt 가 있으면 전부 설치
 RUN bash -lc 'set -e; \
-  for d in /workspace/ComfyUI/custom_nodes/*; do \
+  for d in /workspace/custom_nodes/*; do \
     if [ -f "$d/requirements.txt" ]; then \
       echo "Installing custom node deps: $d/requirements.txt"; \
       pip install -r "$d/requirements.txt"; \
