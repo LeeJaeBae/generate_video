@@ -16,7 +16,7 @@ server_address = os.getenv("SERVER_ADDRESS", "127.0.0.1")
 client_id = str(uuid.uuid4())
 
 # 이미지 저장 디렉토리 (ComfyUI 컨테이너 기준)
-INPUT_DIR = os.getenv("COMFY_INPUT_DIR", "/ComfyUI/input")
+INPUT_DIR = os.getenv("COMFY_INPUT_DIR", "/comfyui/input")
 
 
 def save_base64_image(name: str, base64_data: str) -> str:
