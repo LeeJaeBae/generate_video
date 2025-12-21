@@ -1,7 +1,7 @@
 # Start from the base image
-FROM runpod/worker-comfyui:5.1.0-base
+FROM runpod/worker-comfyui:5.6.0-base-cuda12.8.1
 
-WORKDIR /
+WORKDIR /comfyui
 
 # (VHS VideoCombine 등 영상 노드 쓰면 ffmpeg 필요)
 # base 이미지에 이미 들어있을 수도 있지만, 없으면 조용히 터져서 그냥 박아둠.
@@ -33,12 +33,9 @@ RUN comfy-node-install https://github.com/olduvai-jp/ComfyUI-HfLoader && \
     comfy-node-install https://github.com/kijai/ComfyUI-WanVideoWrapper && \
     comfy-node-install https://github.com/kijai/ComfyUI-KJNodes
 
-# git pull all custom nodes
-RUN bash -lc 'set -e; \
-for d in /comfyui/custom_nodes/*; do \
-  cd $d; \
-  git pull; \
-done'
+RUN if [ -d "/comfyui/custom_nodes/ComfyUI-KJNodes" ] && [ ! -e "/comfyui/custom_nodes/KJNodes" ]; then \
+      ln -s /comfyui/custom_nodes/ComfyUI-KJNodes /comfyui/custom_nodes/KJNodes; \
+    fi
 
 # 각 커스텀 노드 폴더에 requirements.txt 가 있으면 전부 설치
 RUN bash -lc 'set -e; \
