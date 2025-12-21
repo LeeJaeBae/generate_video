@@ -1,11 +1,11 @@
 # Start from the base image
 FROM runpod/worker-comfyui:5.1.0-base
 
-# /workspace 를 네트워크 볼륨(또는 영구 볼륨)로 연결
-RUN rm -rf /workspace && \
-    ln -s /runpod-volume/runpod-slim/ComfyUI /workspace
-
 WORKDIR /
+
+# /runpod-volume/runpod-slim/ComfyUI 를 /runpod-volume/ComfyUI 에 심볼릭 링크
+
+RUN ln -s /runpod-volume/runpod-slim/ComfyUI /runpod-volume/ComfyUI
 
 # (VHS VideoCombine 등 영상 노드 쓰면 ffmpeg 필요)
 # base 이미지에 이미 들어있을 수도 있지만, 없으면 조용히 터져서 그냥 박아둠.
