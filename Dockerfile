@@ -31,7 +31,9 @@ RUN comfy-node-install https://github.com/olduvai-jp/ComfyUI-HfLoader && \
     comfy-node-install https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite && \
     comfy-node-install https://github.com/lrzjason/Comfyui-QwenEditUtils && \
     comfy-node-install https://github.com/kijai/ComfyUI-WanVideoWrapper && \
-    comfy-node-install https://github.com/kijai/ComfyUI-KJNodes
+    comfy-node-install https://github.com/kijai/ComfyUI-KJNodes && \
+    comfy-node-install https://github.com/Artificial-Sweetener/comfyui-WhiteRabbit && \
+    comfy-node-install https://github.com/yolain/ComfyUI-Easy-Use
 
 RUN if [ -d "/comfyui/custom_nodes/ComfyUI-KJNodes" ] && [ ! -e "/comfyui/custom_nodes/KJNodes" ]; then \
       ln -s /comfyui/custom_nodes/ComfyUI-KJNodes /comfyui/custom_nodes/KJNodes; \
