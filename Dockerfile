@@ -44,7 +44,7 @@ RUN bash -lc 'set -e; \
   done'
 
 # Ensure entrypoint is executable
-RUN chmod +x /entrypoint.sh
+RUN chmod +x entrypoint.sh
 
 # Run ComfyUI (background) + handler (foreground)
-CMD ["/bin/bash", "/entrypoint.sh"]
+CMD ["/bin/bash", "entrypoint.sh"]
