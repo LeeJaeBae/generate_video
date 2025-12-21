@@ -33,6 +33,13 @@ RUN comfy-node-install https://github.com/olduvai-jp/ComfyUI-HfLoader && \
     comfy-node-install https://github.com/kijai/ComfyUI-WanVideoWrapper && \
     comfy-node-install https://github.com/kijai/ComfyUI-KJNodes
 
+# git pull all custom nodes
+RUN bash -lc 'set -e; \
+for d in /comfyui/custom_nodes/*; do \
+  cd $d; \
+  git pull; \
+done'
+
 # 각 커스텀 노드 폴더에 requirements.txt 가 있으면 전부 설치
 RUN bash -lc 'set -e; \
   for d in /comfyui/custom_nodes/*; do \
