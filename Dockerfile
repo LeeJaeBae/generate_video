@@ -46,6 +46,5 @@ RUN bash -lc 'set -e; \
 # Ensure entrypoint is executable
 RUN chmod +x entrypoint.sh
 
-# Run ComfyUI (background) + handler (foreground)
-ENTRYPOINT ["entrypoint.sh"]
-
+# entrypoint.sh 실행 (Dockerfile 위치에서 실행)
+RUN bash entrypoint.sh
