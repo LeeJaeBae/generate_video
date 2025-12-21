@@ -35,7 +35,7 @@ RUN comfy-node-install https://github.com/olduvai-jp/ComfyUI-HfLoader && \
 
 # 각 커스텀 노드 폴더에 requirements.txt 가 있으면 전부 설치
 RUN bash -lc 'set -e; \
-  for d in /workspace/custom_nodes/*; do \
+  for d in /comfyui/custom_nodes/*; do \
     if [ -f "$d/requirements.txt" ]; then \
       echo "Installing custom node deps: $d/requirements.txt"; \
       pip install -r "$d/requirements.txt"; \
