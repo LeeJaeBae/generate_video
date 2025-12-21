@@ -47,4 +47,4 @@ RUN bash -lc 'set -e; \
 RUN chmod +x entrypoint.sh
 
 # entrypoint.sh 실행 (Dockerfile 위치에서 실행)
-RUN bash entrypoint.sh
+ENTRYPOINT ["/workspace/entrypoint.sh"]
