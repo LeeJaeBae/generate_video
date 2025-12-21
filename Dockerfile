@@ -5,7 +5,7 @@ FROM runpod/worker-comfyui:5.1.0-base
 RUN rm -rf /workspace && \
     ln -s /runpod-volume/runpod-slim/ComfyUI /workspace
 
-WORKDIR /workspace
+WORKDIR /
 
 # (VHS VideoCombine 등 영상 노드 쓰면 ffmpeg 필요)
 # base 이미지에 이미 들어있을 수도 있지만, 없으면 조용히 터져서 그냥 박아둠.
@@ -13,13 +13,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
  && rm -rf /var/lib/apt/lists/*
 
-# 빌드 컨텍스트 복사 (requirements.txt, entrypoint.sh, workflow 등)
-COPY . .
-
 # Python deps
-# /requirements.txt 를 쓰고 있으니 그 경로 유지
+# (경로를 고정해서 entrypoint/handler 가 /workspace 심볼릭 링크 영향 안 받게 함)
+COPY requirements.txt /requirements.txt
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+    pip install -r /requirements.txt
+
+# Worker files (absolute paths)
+COPY entrypoint.sh /entrypoint.sh
+COPY handler.py /handler.py
 
 
 # Custom nodes install
@@ -44,7 +46,7 @@ RUN bash -lc 'set -e; \
   done'
 
 # Ensure entrypoint is executable
-RUN chmod +x entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # entrypoint.sh 실행 (Dockerfile 위치에서 실행)
-ENTRYPOINT ["/workspace/entrypoint.sh"]
+ENTRYPOINT ["/bin/bash", "/entrypoint.sh"]
