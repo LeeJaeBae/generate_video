@@ -47,4 +47,5 @@ RUN bash -lc 'set -e; \
 RUN chmod +x entrypoint.sh
 
 # Run ComfyUI (background) + handler (foreground)
-CMD ["/bin/bash", "entrypoint.sh"]
+ENTRYPOINT ["entrypoint.sh"]
+
